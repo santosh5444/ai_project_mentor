@@ -448,7 +448,7 @@ def page_student_overview(user: dict):
         return
 
     st.markdown(f"## 📌 {proj['title']}")
-    st.caption(f"Created on {proj['created_at'][:10]}")
+    st.caption(f"Created on {str(proj['created_at'])[:10]}")
 
     inv_code = proj.get("invite_code") or f"PRJ-{proj['id']:04d}"
     stud_college = proj.get("student_college") or user.get("college", "Your College")
@@ -762,7 +762,7 @@ def page_student_code_audit(user: dict):
     st.markdown("#### 📜 Submission History")
     if logs:
         for log in reversed(logs):
-            with st.expander(f"Week {log['week_number']}: {log['phase_name']} — Score: {log['ai_score']}/100 ({log['created_at'][:10]})"):
+            with st.expander(f"Week {log['week_number']}: {log['phase_name']} — Score: {log['ai_score']}/100 ({str(log['created_at'])[:10]})"):
                 st.markdown(f"**Tasks Completed:** {log['tasks_completed']}")
                 if log.get("submitted_code"):
                     st.code(log["submitted_code"], language=log.get("code_language", "python"))
