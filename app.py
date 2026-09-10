@@ -6,7 +6,6 @@ import importlib
 from datetime import datetime
 
 import database
-importlib.reload(database)
 from database import (
     authenticate_user, register_user, get_faculty_users,
     save_project, delete_project, update_project_faculty,
@@ -19,7 +18,6 @@ from database import (
 )
 
 import agents
-importlib.reload(agents)
 from agents import (
     run_project_mentor_pipeline,
     progress_tracking_agent,
@@ -28,7 +26,6 @@ from agents import (
 )
 
 import export_utils
-importlib.reload(export_utils)
 from export_utils import generate_docx_report, generate_markdown_report
 
 # =====================================================================

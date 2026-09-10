@@ -73,9 +73,13 @@ class PgCursorWrapper:
     def __iter__(self):
         return iter(self.fetchall())
 
+_PG_POOL = None
+_DB_INITIALIZED = False
+
 class PgConnectionWrapper:
-    def __init__(self, real_conn):
+    def __init__(self, real_conn, pool=None):
         self.conn = real_conn
+        self.pool = pool
 
     def cursor(self):
         return PgCursorWrapper(self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor))
@@ -87,15 +91,39 @@ class PgConnectionWrapper:
         self.conn.rollback()
 
     def close(self):
-        self.conn.close()
+        if self.pool:
+            try:
+                self.pool.putconn(self.conn)
+            except Exception:
+                try:
+                    self.conn.close()
+                except Exception:
+                    pass
+        else:
+            try:
+                self.conn.close()
+            except Exception:
+                pass
 
 def get_connection():
     if is_postgres() and PSYCOPG2_AVAILABLE:
+        global _PG_POOL
         url = DATABASE_URL
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
-        real_conn = psycopg2.connect(url)
-        return PgConnectionWrapper(real_conn)
+        if _PG_POOL is None or _PG_POOL.closed:
+            from psycopg2 import pool
+            _PG_POOL = pool.ThreadedConnectionPool(1, 15, url)
+        try:
+            real_conn = _PG_POOL.getconn()
+            if real_conn.closed != 0:
+                _PG_POOL.putconn(real_conn, close=True)
+                real_conn = _PG_POOL.getconn()
+        except Exception:
+            from psycopg2 import pool
+            _PG_POOL = pool.ThreadedConnectionPool(1, 15, url)
+            real_conn = _PG_POOL.getconn()
+        return PgConnectionWrapper(real_conn, pool=_PG_POOL)
     else:
         conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         conn.row_factory = sqlite3.Row
@@ -109,6 +137,11 @@ if PSYCOPG2_AVAILABLE:
     DB_INTEGRITY_ERRORS = (sqlite3.IntegrityError, psycopg2.IntegrityError)
 
 def init_db():
+    global _DB_INITIALIZED
+    if _DB_INITIALIZED:
+        return
+    _DB_INITIALIZED = True
+
     conn = get_connection()
     cursor = conn.cursor()
 
