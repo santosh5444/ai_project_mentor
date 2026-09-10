@@ -1,6 +1,6 @@
 import io
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
