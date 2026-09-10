@@ -627,6 +627,15 @@ def get_student_projects(user_id: int) -> List[Dict[str, Any]]:
         projects.append(p)
     return projects
 
+def get_student_project_list(user_id: int) -> List[Dict[str, Any]]:
+    """Ultra-fast lightweight fetch of project IDs and titles for dropdown menus without parsing heavy JSON."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, title FROM projects WHERE user_id = ? ORDER BY updated_at DESC", (user_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [{"id": r["id"], "title": r["title"]} for r in rows]
+
 def get_all_projects_for_faculty(faculty_id: Optional[int] = None) -> List[Dict[str, Any]]:
     conn = get_connection()
     cursor = conn.cursor()

@@ -9,7 +9,7 @@ import database
 from database import (
     authenticate_user, register_user, get_faculty_users,
     save_project, delete_project, update_project_faculty,
-    get_student_projects, get_all_projects_for_faculty, get_project_by_id,
+    get_student_projects, get_student_project_list, get_all_projects_for_faculty, get_project_by_id,
     update_project_progress, update_faculty_feedback,
     update_faculty_evaluation, update_project_team,
     add_progress_log, update_progress_log_faculty_review, get_progress_logs,
@@ -349,8 +349,8 @@ def render_sidebar():
         st.divider()
 
         if user["role"] == "student":
-            # Global Project Switcher
-            projects = get_student_projects(user["id"])
+            # Global Project Switcher (Fast lightweight fetch)
+            projects = get_student_project_list(user["id"])
             if projects:
                 proj_map = {p["id"]: p['title'] for p in projects}
                 ids = list(proj_map.keys())
@@ -359,6 +359,7 @@ def render_sidebar():
                 if curr_id is None or curr_id not in ids:
                     curr_id = ids[0]
                     st.session_state["current_project_id"] = curr_id
+                    st.session_state["active_project"] = None
 
                 idx = ids.index(curr_id) if curr_id in ids else 0
                 chosen = st.selectbox(
@@ -370,9 +371,14 @@ def render_sidebar():
                 )
                 if chosen != st.session_state.get("current_project_id"):
                     st.session_state["current_project_id"] = chosen
+                    st.session_state["active_project"] = None
                     st.rerun()
 
-                active_p = get_project_by_id(st.session_state["current_project_id"])
+                # Session-level caching of active project to prevent redundant DB calls
+                if not st.session_state.get("active_project") or st.session_state.get("active_project", {}).get("id") != st.session_state["current_project_id"]:
+                    st.session_state["active_project"] = get_project_by_id(st.session_state["current_project_id"])
+
+                active_p = st.session_state.get("active_project")
                 if active_p:
                     st.session_state["active_blueprint"] = active_p.get("blueprint")
                     st.session_state["active_title"] = active_p.get("title")
@@ -442,7 +448,10 @@ def page_student_overview(user: dict):
         st.info("No project active. Please click **'➕ New Project Proposal'** in the sidebar to start your first project!")
         return
 
-    proj = get_project_by_id(curr_id)
+    proj = st.session_state.get("active_project")
+    if not proj or proj.get("id") != curr_id:
+        proj = get_project_by_id(curr_id)
+        st.session_state["active_project"] = proj
     if not proj:
         st.warning("Project not found.")
         return
@@ -567,7 +576,10 @@ def page_student_blueprint(user: dict):
         st.info("Please select or create a project first.")
         return
 
-    proj = get_project_by_id(curr_id)
+    proj = st.session_state.get("active_project")
+    if not proj or proj.get("id") != curr_id:
+        proj = get_project_by_id(curr_id)
+        st.session_state["active_project"] = proj
     if not proj:
         st.warning("Project not found.")
         return
@@ -655,7 +667,10 @@ def page_student_code_audit(user: dict):
         st.info("Please select or create a project first.")
         return
 
-    proj = get_project_by_id(curr_id)
+    proj = st.session_state.get("active_project")
+    if not proj or proj.get("id") != curr_id:
+        proj = get_project_by_id(curr_id)
+        st.session_state["active_project"] = proj
     if not proj:
         st.warning("Project not found.")
         return
@@ -725,6 +740,7 @@ def page_student_code_audit(user: dict):
                     new_phase = min(8, s_week + 1)
                     new_percent = max(proj["progress_percent"], audit_res["percent"])
                     update_project_progress(proj["id"], new_percent, new_phase)
+                    st.session_state["active_project"] = None
 
                     st.session_state["latest_audit_view"] = audit_res
                     st.success(f"Audit Complete! Milestone Score: {audit_res['score']}/100. Progress updated to {new_percent}%.")
@@ -779,7 +795,10 @@ def page_student_chat(user: dict):
         st.info("Please select or create a project first from the sidebar.")
         return
 
-    proj = get_project_by_id(curr_id)
+    proj = st.session_state.get("active_project")
+    if not proj or proj.get("id") != curr_id:
+        proj = get_project_by_id(curr_id)
+        st.session_state["active_project"] = proj
     if not proj:
         st.warning("Project not found.")
         return
@@ -925,6 +944,7 @@ def page_student_new_project(user: dict):
                     blueprint = run_project_mentor_pipeline(p_idea.strip(), progress_callback=update_cb)
                     new_id = save_project(user["id"], p_title.strip(), p_idea.strip(), p_fac_id, blueprint, team_members=p_team)
                     st.session_state["current_project_id"] = new_id
+                    st.session_state["active_project"] = None
                     st.session_state["active_blueprint"] = blueprint
                     st.session_state["active_title"] = p_title.strip()
 
