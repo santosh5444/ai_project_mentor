@@ -1,0 +1,18 @@
+# Environment variables & secrets
+.env
+
+# Python cache & virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+ENV/
+
+# Local SQLite databases (since Neon PostgreSQL is active)
+*.db
+
+# OS generated files
+.DS_Store
+Thumbs.db
