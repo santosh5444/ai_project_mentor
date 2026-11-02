@@ -29,34 +29,52 @@ class PgRow(dict):
         return super().__getitem__(item)
 
 class PgCursorWrapper:
-    def __init__(self, real_cursor):
+    def __init__(self, real_cursor, conn_wrapper=None):
         self.cursor = real_cursor
+        self.conn_wrapper = conn_wrapper
         self.lastrowid = None
 
     def execute(self, sql: str, params=None):
-        # Convert SQLite ? placeholders to PostgreSQL %s
         pg_sql = sql.replace("?", "%s")
-        # For INSERT statements without RETURNING, append RETURNING id to capture lastrowid
         upper_sql = pg_sql.strip().upper()
-        if upper_sql.startswith("INSERT INTO") and "RETURNING" not in upper_sql:
+        is_insert = upper_sql.startswith("INSERT INTO") and "RETURNING" not in upper_sql
+        if is_insert:
             pg_sql = pg_sql.rstrip(";") + " RETURNING id;"
+
+        def _do_execute(cur):
             if params:
-                self.cursor.execute(pg_sql, params)
+                cur.execute(pg_sql, params)
             else:
-                self.cursor.execute(pg_sql)
+                cur.execute(pg_sql)
+            if is_insert:
+                try:
+                    row = cur.fetchone()
+                    if row:
+                        self.lastrowid = row[0] if isinstance(row, tuple) else row.get("id")
+                except Exception:
+                    pass
+
+        try:
+            _do_execute(self.cursor)
+            return self
+        except (psycopg2.OperationalError, psycopg2.InterfaceError) as err:
+            # Stale / idle connection recovery:
             try:
-                row = self.cursor.fetchone()
-                if row:
-                    self.lastrowid = row[0] if isinstance(row, tuple) else row.get("id")
+                if self.conn_wrapper and self.conn_wrapper.conn:
+                    self.conn_wrapper.conn.rollback()
             except Exception:
                 pass
-            return self
-        else:
-            if params:
-                self.cursor.execute(pg_sql, params)
-            else:
-                self.cursor.execute(pg_sql)
-            return self
+            
+            try:
+                fresh_conn_wrapper = get_connection(force_fresh=True)
+                if isinstance(fresh_conn_wrapper, PgConnectionWrapper):
+                    self.cursor = fresh_conn_wrapper.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                    self.conn_wrapper = fresh_conn_wrapper
+                    _do_execute(self.cursor)
+                    return self
+            except Exception:
+                pass
+            raise err
 
     def fetchone(self):
         row = self.cursor.fetchone()
@@ -82,7 +100,7 @@ class PgConnectionWrapper:
         self.pool = pool
 
     def cursor(self):
-        return PgCursorWrapper(self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor))
+        return PgCursorWrapper(self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor), conn_wrapper=self)
 
     def commit(self):
         self.conn.commit()
@@ -105,25 +123,68 @@ class PgConnectionWrapper:
             except Exception:
                 pass
 
-def get_connection():
+def get_connection(force_fresh: bool = False):
     if is_postgres() and PSYCOPG2_AVAILABLE:
         global _PG_POOL
         url = DATABASE_URL
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
-        if _PG_POOL is None or _PG_POOL.closed:
-            from psycopg2 import pool
-            _PG_POOL = pool.ThreadedConnectionPool(1, 15, url)
-        try:
-            real_conn = _PG_POOL.getconn()
-            if real_conn.closed != 0:
-                _PG_POOL.putconn(real_conn, close=True)
+
+        if "?" not in url and any(provider in url for provider in ["supabase", "neon", "render", "railway", "pooler"]):
+            url += "?sslmode=require"
+
+        if force_fresh and _PG_POOL:
+            try:
+                _PG_POOL.closeall()
+            except Exception:
+                pass
+            _PG_POOL = None
+
+        for attempt in range(2):
+            try:
+                if _PG_POOL is None or _PG_POOL.closed:
+                    from psycopg2 import pool
+                    _PG_POOL = pool.ThreadedConnectionPool(
+                        1, 15, url,
+                        connect_timeout=10,
+                        keepalives=1,
+                        keepalives_idle=30,
+                        keepalives_interval=10,
+                        keepalives_count=5
+                    )
+                
                 real_conn = _PG_POOL.getconn()
-        except Exception:
-            from psycopg2 import pool
-            _PG_POOL = pool.ThreadedConnectionPool(1, 15, url)
-            real_conn = _PG_POOL.getconn()
-        return PgConnectionWrapper(real_conn, pool=_PG_POOL)
+                is_alive = False
+                try:
+                    if real_conn.closed == 0:
+                        with real_conn.cursor() as test_cur:
+                            test_cur.execute("SELECT 1;")
+                        is_alive = True
+                except Exception:
+                    is_alive = False
+
+                if not is_alive:
+                    try:
+                        _PG_POOL.putconn(real_conn, close=True)
+                    except Exception:
+                        pass
+                    real_conn = _PG_POOL.getconn()
+
+                return PgConnectionWrapper(real_conn, pool=_PG_POOL)
+            except Exception as e:
+                if _PG_POOL and not _PG_POOL.closed:
+                    try:
+                        _PG_POOL.closeall()
+                    except Exception:
+                        pass
+                    _PG_POOL = None
+                if attempt == 1:
+                    print(f"PostgreSQL connection failed ({e}), falling back to SQLite.")
+                    break
+
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
     else:
         conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         conn.row_factory = sqlite3.Row
@@ -493,25 +554,53 @@ def register_user(username: str, password: str, role: str, full_name: str, email
         conn.close()
 
 def authenticate_user(identifier: str, password: str) -> Optional[Dict[str, Any]]:
-    """Authenticates user by either username OR email address."""
+    """Authenticates user by either username OR email address with automatic reconnection and fallback."""
     if not identifier or not password:
         return None
-    conn = get_connection()
-    cursor = conn.cursor()
     clean_id = identifier.strip().lower()
-    cursor.execute(
-        """
-        SELECT id, username, role, full_name, email, department, college 
-        FROM users 
-        WHERE (LOWER(username) = ? OR LOWER(email) = ?) 
-          AND password_hash = ?
-        """,
-        (clean_id, clean_id, hash_password(password.strip()))
-    )
-    row = cursor.fetchone()
-    conn.close()
-    if row:
-        return dict(row)
+    hashed_pwd = hash_password(password.strip())
+
+    for attempt in range(2):
+        try:
+            conn = get_connection(force_fresh=(attempt > 0))
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, username, role, full_name, email, department, college 
+                FROM users 
+                WHERE (LOWER(username) = ? OR LOWER(email) = ?) 
+                  AND password_hash = ?
+                """,
+                (clean_id, clean_id, hashed_pwd)
+            )
+            row = cursor.fetchone()
+            conn.close()
+            if row:
+                return dict(row)
+            return None
+        except Exception:
+            if attempt == 0:
+                continue
+            try:
+                fb_conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+                fb_conn.row_factory = sqlite3.Row
+                fb_cur = fb_conn.cursor()
+                fb_cur.execute(
+                    """
+                    SELECT id, username, role, full_name, email, department, college 
+                    FROM users 
+                    WHERE (LOWER(username) = ? OR LOWER(email) = ?) 
+                      AND password_hash = ?
+                    """,
+                    (clean_id, clean_id, hashed_pwd)
+                )
+                fb_row = fb_cur.fetchone()
+                fb_conn.close()
+                if fb_row:
+                    return dict(fb_row)
+            except Exception:
+                pass
+            return None
     return None
 
 def get_faculty_users() -> List[Dict[str, Any]]:
