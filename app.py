@@ -22,11 +22,17 @@ from agents import (
     run_project_mentor_pipeline,
     progress_tracking_agent,
     conversational_mentor_agent,
-    transcribe_audio_groq
+    transcribe_audio_groq,
+    generate_pytest_suite,
+    viva_defense_simulator
 )
 
 import export_utils
-from export_utils import generate_docx_report, generate_markdown_report
+from export_utils import (
+    generate_docx_report,
+    generate_markdown_report,
+    generate_pptx_deck
+)
 
 # =====================================================================
 # Page Configuration & Clean Styling
@@ -218,6 +224,57 @@ def render_voice_speech_player(text_to_speak: str, persona_name: str = "AI Mento
     </script>
     """
     components.html(html_code, height=75)
+
+
+def render_mermaid(mermaid_code: str, height: int = 420):
+    """Renders a responsive visual Mermaid.js flowchart in Streamlit using CDN."""
+    cleaned_code = mermaid_code.replace("```mermaid", "").replace("```", "").strip()
+    if not any(kw in cleaned_code for kw in ["graph", "flowchart", "sequenceDiagram", "classDiagram"]):
+        cleaned_code = """graph TD
+    User[Student / User] --> Frontend[Streamlit Web App]
+    Frontend --> Controller[FastAPI Orchestrator]
+    Controller --> Agents[AI Specialist Agents]
+    Agents --> DB[(SQLite / Vector Store)]
+    Agents --> Result[Academic Deliverables & Code Audit]"""
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+        <style>
+            body {{
+                margin: 0;
+                padding: 15px;
+                background-color: #FAFAFA;
+                border-radius: 8px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            }}
+            .mermaid {{
+                width: 100%;
+                text-align: center;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="mermaid">
+{cleaned_code}
+        </div>
+        <script>
+            mermaid.initialize({{
+                startOnLoad: true,
+                theme: 'neutral',
+                flowchart: {{ useMaxWidth: true, htmlLabels: true, curve: 'basis' }}
+            }});
+        </script>
+    </body>
+    </html>
+    """
+    components.html(html_content, height=height, scrolling=True)
 
 def extract_mermaid_code(doc_text: str) -> str:
     match = re.search(r"```(?:mermaid)?\s*([\s\S]*?)```", doc_text)
@@ -590,7 +647,7 @@ def page_student_blueprint(user: dict):
     fac_name = proj.get("faculty_name") or "Unassigned Guide"
 
     # Header with 1-Click Downloads
-    h_col1, h_col2, h_col3 = st.columns([3, 1, 1])
+    h_col1, h_col2, h_col3, h_col4 = st.columns([2.5, 1, 1, 1])
     with h_col1:
         st.markdown(f"## 📑 Academic Blueprint: {proj['title']}")
         st.caption(f"Team: **{proj.get('team_members', user['full_name'])}** ({stud_college}) • Supervisor: **{fac_name}** ({fac_college or 'Faculty'}) • 🔑 Code: `{proj.get('invite_code', 'PRJ-CODE')}`")
@@ -608,13 +665,28 @@ def page_student_blueprint(user: dict):
             faculty_college=fac_college
         )
         st.download_button(
-            label="📄 Word Report (.docx)",
+            label="📄 Word (.docx)",
             data=docx_data,
             file_name=f"{proj['title'].replace(' ', '_')}_Report.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             use_container_width=True
         )
     with h_col3:
+        pptx_data = generate_pptx_deck(
+            project_title=proj["title"],
+            student_name=user["full_name"],
+            blueprint=bp,
+            team_members=proj.get("team_members", user["full_name"]),
+            faculty_name=fac_name
+        )
+        st.download_button(
+            label="📽️ Slides (.pptx)",
+            data=pptx_data,
+            file_name=f"{proj['title'].replace(' ', '_')}_Presentation.pptx",
+            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            use_container_width=True
+        )
+    with h_col4:
         md_data = generate_markdown_report(
             project_title=proj["title"],
             student_name=user["full_name"],
@@ -656,9 +728,11 @@ def page_student_blueprint(user: dict):
     with st.expander("📄 7. Academic Documentation, Abstract & Synopsis", expanded=False):
         st.markdown(bp.get("documentation", "No documentation available."))
 
-    with st.expander("📐 8. System Architecture Diagram (Visual Mermaid)", expanded=True):
+    with st.expander("📐 8. System Architecture Diagram (Visual Interactive)", expanded=True):
         mermaid_code = extract_mermaid_code(bp.get("documentation", ""))
-        st.markdown(f"```mermaid\n{mermaid_code}\n```")
+        render_mermaid(mermaid_code, height=420)
+        with st.expander("📝 View / Copy Mermaid.js Architecture Code", expanded=False):
+            st.code(mermaid_code, language="mermaid")
 
 # 3. Code Submission & AI Audit (Clean 2-Column Interface)
 def page_student_code_audit(user: dict):

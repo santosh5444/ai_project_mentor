@@ -515,3 +515,128 @@ def transcribe_audio_groq(audio_bytes: bytes, filename: str = "recording.wav", c
         )
         return transcription.text.strip()
 
+
+
+# 11. Automated Pytest Test Suite Generator
+# =====================================================================
+def generate_pytest_suite(code_snippet: str, project_title: str, client: Optional[Groq] = None) -> str:
+    """Generates a complete, ready-to-run Pytest test suite with unit tests and edge cases."""
+    if client is None:
+        client = get_groq_client()
+
+    prompt = f"""
+You are the Senior Software Testing Engineer and QA Specialist for academic engineering projects.
+
+PROJECT: "{project_title}"
+
+STUDENT SUBMITTED CODE:
+```python
+{code_snippet[:4000]}
+```
+
+--- TASK ---
+Generate a complete, professional, ready-to-run `test_suite.py` file using `pytest`.
+
+Your response must include:
+1. Complete `pytest` test code inside a single ```python ``` block.
+2. Include:
+   - Happy path / positive unit test cases.
+   - Edge case test cases (boundary values, null/None inputs, unexpected types).
+   - Error handling & exception test cases (`pytest.raises`).
+   - Mocking for external network calls or database calls (using `unittest.mock` or `pytest-mock` if applicable).
+3. Clear docstrings explaining each test case.
+4. Below the code block, provide a 3-bullet guide on how the student can execute the tests (`pip install pytest`, `pytest -v`, `pytest --cov`).
+
+Format cleanly and ensure the Python code is syntactically correct and directly runnable.
+"""
+    return ask_ai(prompt, client, max_tokens=1500)
+
+# =====================================================================
+# 12. Interactive Mock Viva Defense Examiner
+# =====================================================================
+def viva_defense_simulator(
+    project_title: str,
+    project_context: str,
+    current_q_index: int,
+    user_answer: str = "",
+    client: Optional[Groq] = None
+) -> Dict[str, Any]:
+    """Simulates a strict yet constructive University External Viva Voce Examination."""
+    if client is None:
+        client = get_groq_client()
+
+    VIVA_TOPICS = [
+        "Architecture & System Design: Why this specific architectural pattern and component breakdown?",
+        "Tech Stack Trade-offs: Why did you pick this specific stack over industry alternatives (e.g. FastAPI vs Flask, ChromaDB vs PostgreSQL)?",
+        "Edge Cases & Robustness: What happens when inputs are corrupted, models hallucinate, or APIs fail?",
+        "Scalability & Performance: How does your system behave under high concurrent user load, and where are the bottlenecks?",
+        "Research Contribution & Novelty: What makes your implementation innovative compared to existing off-the-shelf tools?"
+    ]
+
+    topic_focus = VIVA_TOPICS[min(current_q_index, len(VIVA_TOPICS) - 1)]
+
+    # If first question (no prior user answer to evaluate)
+    if current_q_index == 0 or not user_answer.strip():
+        prompt = f"""
+You are the University External Viva Voce Examiner for the engineering capstone project:
+Title: "{project_title}"
+Context: {project_context[:1000]}
+
+This is Question 1 of 5 in the final viva defense.
+Topic Focus: {topic_focus}
+
+Ask ONE direct, challenging, and professional technical question to test the student's foundational understanding of their project design.
+Do not give the answer. Keep the tone academic, formal, and authoritative.
+"""
+        q_text = ask_ai(prompt, client, max_tokens=300)
+        return {
+            "evaluation": "",
+            "score": None,
+            "next_question": q_text,
+            "is_final": False
+        }
+
+    # Evaluate student's answer and generate next question or final verdict
+    is_final = (current_q_index >= len(VIVA_TOPICS) - 1)
+    
+    prompt = f"""
+You are the University External Viva Voce Examiner evaluating a student defense for:
+Title: "{project_title}"
+Context: {project_context[:1000]}
+
+The student was asked about: "{topic_focus}"
+Student's Answer:
+"{user_answer}"
+
+--- EVALUATION TASK ---
+1. Evaluate the student's answer:
+   - Strengths in their technical explanation.
+   - Missing points or weaknesses an external examiner would catch.
+   - The ideal answer / how they should improve.
+2. Award a score for this answer between 1 and 10.
+3. {'Provide final summary remarks on the student\'s overall viva readiness.' if is_final else f'Ask Question {current_q_index + 2} of 5 focusing on: ' + VIVA_TOPICS[current_q_index + 1]}
+
+Output format:
+SCORE: <integer 1-10>
+### 📝 Examiner Assessment:
+<your constructive evaluation>
+
+### {'🎓 Final Viva Readiness Verdict:' if is_final else f'❓ Question {current_q_index + 2} of 5:'}
+<the verdict or next question>
+"""
+    response = ask_ai(prompt, client, max_tokens=1000)
+
+    score = 7
+    score_match = re.search(r"SCORE:\s*(\d+)", response)
+    if score_match:
+        try:
+            score = max(1, min(10, int(score_match.group(1))))
+        except Exception:
+            pass
+
+    return {
+        "evaluation": response,
+        "score": score,
+        "is_final": is_final
+    }
+
