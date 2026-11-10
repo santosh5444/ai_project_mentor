@@ -6,11 +6,10 @@ import importlib
 from datetime import datetime
 
 import database
-importlib.reload(database)
 from database import (
     authenticate_user, register_user, get_faculty_users,
     save_project, delete_project, update_project_faculty,
-    get_student_projects, get_all_projects_for_faculty, get_project_by_id,
+    get_student_projects, get_student_project_list, get_all_projects_for_faculty, get_project_by_id,
     update_project_progress, update_faculty_feedback,
     update_faculty_evaluation, update_project_team,
     add_progress_log, update_progress_log_faculty_review, get_progress_logs,
@@ -18,7 +17,6 @@ from database import (
 )
 
 import agents
-importlib.reload(agents)
 from agents import (
     run_project_mentor_pipeline,
     progress_tracking_agent,
@@ -28,7 +26,6 @@ from agents import (
 )
 
 import export_utils
-importlib.reload(export_utils)
 from export_utils import (
     generate_docx_report,
     generate_markdown_report,
@@ -349,6 +346,31 @@ def format_date(val) -> str:
         return val.strftime("%Y-%m-%d")
     return str(val)[:10]
 
+@st.cache_data(show_spinner=False)
+def get_cached_docx(project_id, project_title, student_name, blueprint, team_members, faculty_name, faculty_feedback, faculty_score, sign_off_date):
+    buf = generate_docx_report(
+        project_title=project_title,
+        student_name=student_name,
+        blueprint=blueprint,
+        team_members=team_members,
+        faculty_name=faculty_name,
+        faculty_feedback=faculty_feedback,
+        faculty_score=faculty_score,
+        sign_off_date=sign_off_date
+    )
+    return buf.getvalue()
+
+@st.cache_data(show_spinner=False)
+def get_cached_pptx(project_id, project_title, student_name, blueprint, team_members, faculty_name):
+    buf = generate_pptx_deck(
+        project_title=project_title,
+        student_name=student_name,
+        blueprint=blueprint,
+        team_members=team_members,
+        faculty_name=faculty_name
+    )
+    return buf.getvalue()
+
 def extract_mermaid_code(doc_text: str) -> str:
     match = re.search(r"```(?:mermaid)?\s*([\s\S]*?)```", doc_text)
     if match:
@@ -550,8 +572,8 @@ def render_sidebar():
         """, unsafe_allow_html=True)
 
         if user["role"] == "student":
-            # Global Project Switcher
-            projects = get_student_projects(user["id"])
+            # Global Project Switcher (Fast lightweight fetch)
+            projects = get_student_project_list(user["id"])
             if projects:
                 proj_map = {p["id"]: f"#{p['id']} - {p['title']}" for p in projects}
                 ids = list(proj_map.keys())
@@ -560,6 +582,7 @@ def render_sidebar():
                 if curr_id is None or curr_id not in ids:
                     curr_id = ids[0]
                     st.session_state["current_project_id"] = curr_id
+                    st.session_state["active_project_data"] = None
 
                 idx = ids.index(curr_id) if curr_id in ids else 0
                 chosen = st.selectbox(
@@ -571,15 +594,22 @@ def render_sidebar():
                 )
                 if chosen != st.session_state.get("current_project_id"):
                     st.session_state["current_project_id"] = chosen
+                    st.session_state["active_project_data"] = None
                     st.rerun()
 
-                active_p = get_project_by_id(st.session_state["current_project_id"])
+                # Single shared query per render cycle
+                active_p = st.session_state.get("active_project_data")
+                if not active_p or active_p.get("id") != st.session_state["current_project_id"]:
+                    active_p = get_project_by_id(st.session_state["current_project_id"])
+                    st.session_state["active_project_data"] = active_p
+
                 if active_p:
                     st.session_state["active_blueprint"] = active_p.get("blueprint")
                     st.session_state["active_title"] = active_p.get("title")
                     if active_p.get("faculty_name"):
                         st.caption(f"👨‍🏫 Guide: **{active_p['faculty_name']}**")
             else:
+                st.session_state["active_project_data"] = None
                 st.info("No projects yet. Click 'New Project Proposal' below!")
 
             st.markdown("<div style='margin: 12px 0; border-top: 1px solid #E2E8F0;'></div>", unsafe_allow_html=True)
@@ -629,7 +659,11 @@ def page_student_overview(user: dict):
         st.info("No project active. Please click **'➕ New Project Proposal'** in the sidebar to start your first project!")
         return
 
-    proj = get_project_by_id(curr_id)
+    proj = st.session_state.get("active_project_data")
+    if not proj or proj.get("id") != curr_id:
+        proj = get_project_by_id(curr_id)
+        st.session_state["active_project_data"] = proj
+
     if not proj:
         st.warning("Project not found.")
         return
@@ -787,7 +821,11 @@ def page_student_blueprint(user: dict):
         st.info("Please select or create a project first.")
         return
 
-    proj = get_project_by_id(curr_id)
+    proj = st.session_state.get("active_project_data")
+    if not proj or proj.get("id") != curr_id:
+        proj = get_project_by_id(curr_id)
+        st.session_state["active_project_data"] = proj
+
     if not proj:
         st.warning("Project not found.")
         return
@@ -811,15 +849,16 @@ def page_student_blueprint(user: dict):
 
     h_col1, h_col2, h_col3 = st.columns(3)
     with h_col1:
-        docx_data = generate_docx_report(
-            project_title=proj["title"],
-            student_name=user["full_name"],
-            blueprint=bp,
-            team_members=proj.get("team_members", user["full_name"]),
-            faculty_name=proj.get("faculty_name", "Department Guide"),
-            faculty_feedback=proj.get("faculty_feedback", ""),
-            faculty_score=proj.get("faculty_score"),
-            sign_off_date=proj.get("sign_off_date")
+        docx_data = get_cached_docx(
+            proj["id"],
+            proj["title"],
+            user["full_name"],
+            bp,
+            proj.get("team_members", user["full_name"]),
+            proj.get("faculty_name", "Department Guide"),
+            proj.get("faculty_feedback", ""),
+            proj.get("faculty_score"),
+            proj.get("sign_off_date")
         )
         st.download_button(
             label="📄 Download Word Report (.docx)",
@@ -829,12 +868,13 @@ def page_student_blueprint(user: dict):
             use_container_width=True
         )
     with h_col2:
-        pptx_data = generate_pptx_deck(
-            project_title=proj["title"],
-            student_name=user["full_name"],
-            blueprint=bp,
-            team_members=proj.get("team_members", user["full_name"]),
-            faculty_name=proj.get("faculty_name", "Department Guide")
+        pptx_data = get_cached_pptx(
+            proj["id"],
+            proj["title"],
+            user["full_name"],
+            bp,
+            proj.get("team_members", user["full_name"]),
+            proj.get("faculty_name", "Department Guide")
         )
         st.download_button(
             label="📽️ Download Slides (.pptx)",
