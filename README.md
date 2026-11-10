@@ -1,5 +1,7 @@
 # 🎓 AI Academic Project Mentor (AAPM)
-> *"Your Intelligent AI Guide from Project Idea to Final Submission"An enterprise-grade, agentic AI platform built strictly according to the **Infosys Capstone Lecture Specification**. It streamlines academic project guidance by orchestrating multiple specialized AI agents to generate feasibility blueprints, track 8-week milestones, and provide supervisor dashboards with real-time mentorship.
+> *"Your Intelligent AI Guide from Project Idea to Final Submission"*
+
+An enterprise-grade, agentic AI platform built strictly according to the **Infosys Capstone Lecture Specification**. It streamlines academic project guidance by orchestrating multiple specialized AI agents to generate feasibility blueprints, track 8-week milestones, conduct mock viva examinations, and provide supervisor dashboards.
 
 ---
 
@@ -7,7 +9,7 @@
 
 ```
                      Student / Faculty Login
-                                │
+                               │
                 ┌──────────────┴──────────────┐
                 ▼                             ▼
         [Student Portal]              [Faculty Portal]
@@ -24,12 +26,12 @@ Agent        Agent         Stack       Planning     Agent         Agent
                            Agent        Agent                     (UML & SRS)
    └────────────┬────────────┴────────────┴────────────┴────────────┘
                 ▼
-      Master Mentor Synthesis (Executive Report & Project Blueprint)
+      Master Mentor Synthesis (Executive Report & Viva Voce Guide)
                 │
         ┌───────┴────────┐
         ▼                ▼
-8-Week Progress    Conversational AI Mentor
-Tracking Agent     (Text + Mic / Audio Speech)
+8-Week Progress    Conversational
+Tracking Agent     AI Mentor (Q&A)
 ```
 
 ### 🤖 The 7 Core Specialist Agents:
@@ -46,14 +48,16 @@ Tracking Agent     (Text + Mic / Audio Speech)
 ## ✨ Key Features
 
 - **⚡ 5x Faster Parallel Inference:** Executes specialist agents concurrently via Groq's high-speed inference engine (`ThreadPoolExecutor`).
-- **👥 Role-Based Authentication & Supervisor Pairing:** Clean Student and Faculty portals powered by PostgreSQL or SQLite (`mentor.db`) with assigned faculty mentors.
-- **👨‍🏫 Official University Grading Rubric:** Supervisors assign official internal marks across Implementation (35 pts), SRS/Architecture (25 pts), Testing (20 pts), and Project Quality (20 pts).
-- **🎓 Verifiable Milestone Sign-off:** Faculty can grant official phase approvals and sign-offs with timestamps.
+- **👥 Role-Based Authentication & Supervisor Pairing:** Clean Student and Faculty portals powered by a local SQLite database (`mentor.db`) with assigned faculty mentors.
+- **👨‍🏫 Official University Grading Rubric:** Supervisors assign official internal marks across Implementation (35 pts), SRS/Architecture (25 pts), Testing (20 pts), and Viva readiness (20 pts).
+- **🎓 Verifiable Milestone Sign-off & Viva Clearance:** Faculty can grant official phase approvals and viva clearances with timestamps.
 - **📋 Mandatory Supervisor Directives:** Guides set actionable requirement checklists directly visible on student dashboards.
 - **👥 Capstone Team Rosters & Roll Numbers:** Support for multi-student teams with roll numbers, automatically embedded into formal reports.
 - **💻 Deep AI Code Audit & Progress Engine:** Students submit working code files or snippets; the AI audits code quality, security, provides refactored code snippets, and updates completion percentage.
-- **💬 Interactive AI Mentor with Mic & Speech:** Conversational pair-programming assistant aware of the project's exact stack, supporting text chat, microphone voice input (Groq Whisper), and natural voice audio playback.
-- **📄 1-Click Academic Export:** Download complete formal Academic Reports as formatted **Word Documents (`.docx`)** with official Supervisor Endorsement Certificates, or Markdown (`.md`).
+- **🧪 Automated Unit Test Generator (Pytest):** Generates ready-to-run `test_suite.py` test cases, boundary checks, and error assertions for submitted student code.
+- **🎓 External Examiner Mock Viva Simulator:** Simulates a 5-question university viva voce defense, scores technical answers (1-10), and issues a verifiable Viva Readiness Certificate.
+- **💬 Interactive AI Mentor:** Conversational assistant aware of the project's exact stack, offering real-time architecture, debugging, and milestone coaching.
+- **📄 1-Click Multi-Format Academic Export:** Download complete formal Academic Reports as formatted **Word Documents (`.docx`)** with official Supervisor Endorsement Certificates, **PowerPoint Presentation Decks (`.pptx`)**, or Markdown (`.md`).
 
 ---
 
@@ -87,38 +91,4 @@ You can use the **1-Click Demo Login** buttons on the login screen or enter the 
 | **👨‍🎓 Student** | `student1` | `student123` | Create blueprints, submit progress, chat with mentor |
 | **👨‍🏫 Faculty** | `faculty1` | `faculty123` | Monitor student teams, view logs, submit supervisor feedback |
 
-*(New accounts can also be created instantly using the **Create Account** tab).*
-
----
-
-## 🐳 Docker & PostgreSQL Production Deployment
-
-### 1. One-Click Launch with Docker Compose
-To run both the **PostgreSQL 16 database** and the **Streamlit Web Application** in isolated Docker containers:
-
-```bash
-# 1. Set your Groq API Key
-export GROQ_API_KEY="your_groq_api_key_here"   # On Linux/macOS
-$env:GROQ_API_KEY="your_groq_api_key_here"      # On Windows PowerShell
-
-# 2. Build and run containers
-docker compose up --build
-```
-Your application will be live at `http://localhost:8501` backed by a persistent PostgreSQL database on port `5432`!
-
-### 2. Standalone Cloud PostgreSQL (Neon / Supabase / Railway)
-If you prefer a hosted PostgreSQL instance without running a local database container:
-1. Create a database on [Neon.tech](https://neon.tech) or [Supabase.com](https://supabase.com).
-2. Add your connection URL to `.env`:
-   ```env
-   DATABASE_URL=postgresql://user:password@ep-xyz.neon.tech/neondb?sslmode=require
-   ```
-3. Run the migration script to transfer all existing records from local SQLite to PostgreSQL:
-   ```bash
-   python migrate_to_postgres.py
-   ```
-4. Start the app:
-   ```bash
-   streamlit run app.py
-   ```
-The app will automatically detect PostgreSQL and use it as its primary database!
+*(New accounts can also be created instantly using the **New Registration** tab).*
