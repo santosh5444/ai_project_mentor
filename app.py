@@ -450,56 +450,7 @@ def render_auth_screen():
         </div>
         """, unsafe_allow_html=True)
 
-        # 1-Click Demo Profiles in Visual Cards
-        st.markdown("""
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
-            <span style="font-size: 0.82rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em;">
-                ⚡ 1-Click Instant Evaluator Access
-            </span>
-            <span style="font-size: 0.75rem; color: #94A3B8;">No credentials needed</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-        d_col1, d_col2 = st.columns(2)
-        with d_col1:
-            st.markdown("""
-            <div style="background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%); border: 1.5px solid #BFDBFE; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="font-size: 1.7rem;">👨‍🎓</div>
-                    <div>
-                        <div style="font-weight: 700; color: #1E3A8A; font-size: 0.92rem;">Aarav Sharma</div>
-                        <div style="font-size: 0.76rem; color: #64748B;">Student Lead • Final Year</div>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            if st.button("🚀 Enter as Student", type="primary", key="btn_demo_student", use_container_width=True):
-                u = authenticate_user("student1", "student123")
-                if u:
-                    st.session_state["user"] = u
-                    st.rerun()
-
-        with d_col2:
-            st.markdown("""
-            <div style="background: linear-gradient(135deg, #F8FAFC 0%, #FEF3C7 100%); border: 1.5px solid #FDE68A; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="font-size: 1.7rem;">👨‍🏫</div>
-                    <div>
-                        <div style="font-weight: 700; color: #92400E; font-size: 0.92rem;">Dr. Ramesh Gupta</div>
-                        <div style="font-size: 0.76rem; color: #78350F;">Faculty Supervisor & Guide</div>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            if st.button("🏛️ Enter as Faculty Guide", key="btn_demo_faculty", use_container_width=True):
-                u = authenticate_user("faculty1", "faculty123")
-                if u:
-                    st.session_state["user"] = u
-                    st.rerun()
-
-        st.markdown("<div style='margin: 18px 0; border-top: 1px solid #E2E8F0;'></div>", unsafe_allow_html=True)
-
-        auth_tab1, auth_tab2 = st.tabs(["🔑 Sign In with Credentials", "📝 Register New Account"])
+        auth_tab1, auth_tab2 = st.tabs(["🔑 Sign In", "📝 Register New Account"])
         with auth_tab1:
             st.markdown("<div style='padding-top: 6px;'></div>", unsafe_allow_html=True)
             uname = st.text_input("Username or Email", key="auth_uname", placeholder="e.g. student1 or aarav@college.edu")
