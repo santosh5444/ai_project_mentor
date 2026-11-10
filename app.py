@@ -342,6 +342,13 @@ if "active_blueprint" not in st.session_state:
 if "active_title" not in st.session_state:
     st.session_state["active_title"] = ""
 
+def format_date(val) -> str:
+    if not val:
+        return ""
+    if hasattr(val, "strftime"):
+        return val.strftime("%Y-%m-%d")
+    return str(val)[:10]
+
 def extract_mermaid_code(doc_text: str) -> str:
     match = re.search(r"```(?:mermaid)?\s*([\s\S]*?)```", doc_text)
     if match:
@@ -633,7 +640,7 @@ def page_student_overview(user: dict):
         <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
             <div style="max-width: 780px;">
                 <div style="display:inline-flex; align-items:center; gap:6px; background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.25); padding:4px 12px; border-radius:9999px; font-size:0.75rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:10px;">
-                    🎓 CAPSTONE PROJECT #{proj['id']} &nbsp;•&nbsp; 🔑 CODE: {proj.get('invite_code', 'PRJ')} &nbsp;•&nbsp; REGISTERED {proj['created_at'][:10]}
+                    🎓 CAPSTONE PROJECT #{proj['id']} &nbsp;•&nbsp; 🔑 CODE: {proj.get('invite_code', 'PRJ')} &nbsp;•&nbsp; REGISTERED {format_date(proj.get('created_at'))}
                 </div>
                 <h1 style="color:#FFFFFF; font-size:1.85rem; font-weight:800; margin:0 0 8px 0; letter-spacing:-0.02em;">
                     {proj['title']}
@@ -1029,7 +1036,7 @@ def page_student_code_audit(user: dict):
     st.markdown("#### 📜 Submission History")
     if logs:
         for log in reversed(logs):
-            with st.expander(f"Week {log['week_number']}: {log['phase_name']} — Score: {log['ai_score']}/100 ({log['created_at'][:10]})"):
+            with st.expander(f"Week {log['week_number']}: {log['phase_name']} — Score: {log['ai_score']}/100 ({format_date(log.get('created_at'))})"):
                 st.markdown(f"**Tasks Completed:** {log['tasks_completed']}")
                 if log.get("submitted_code"):
                     st.code(log["submitted_code"], language=log.get("code_language", "python"))
